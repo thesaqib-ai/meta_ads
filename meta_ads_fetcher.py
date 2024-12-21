@@ -27,12 +27,42 @@ def fetch_data(query, start_date, end_date):
         "x-rapidapi-host": "meta-ad-library.p.rapidapi.com"
     }
 
-    response = requests.get(url, headers=headers, params=querystring)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Error fetching data: {response.status_code}")
-        return None
+    ads_info = []
+    continuation_token = None
+
+    while True:
+        if continuation_token:
+            querystring["continuation_token"] = continuation_token
+
+        response = requests.get(url, headers=headers, params=querystring)
+        if response.status_code == 200:
+            data = response.json()
+
+            for ad_set in data.get("results", []):
+                for ad in ad_set:
+                    ad_info = {
+                        "Continuation Token": data.get("continuation_token", ""),
+                        "Title": ad["snapshot"].get("title"),
+                        "Link URL": ad["snapshot"].get("link_url"),
+                        "Page Name": ad.get("pageName"),
+                        "Image URL": ad["snapshot"]["images"][0].get("original_image_url") if ad["snapshot"].get("images") else None,
+                        "Body": ad["snapshot"].get("body", {}).get("markup", {}).get("__html"),
+                        "Creation Time": decode_timestamp(ad["snapshot"].get("creation_time")),
+                        "End Date": decode_timestamp(ad.get("endDate")) if ad.get("endDate") else None,
+                        "Page URL": ad["snapshot"].get("page_profile_uri"),
+                        "Page Like Count": ad["snapshot"].get("page_like_count"),
+                        "Publisher Platforms": ad.get("publisherPlatform")
+                    }
+                    ads_info.append(ad_info)
+
+            continuation_token = data.get("continuation_token")
+            if not continuation_token:
+                break
+        else:
+            st.error(f"Error fetching data: {response.status_code}")
+            break
+
+    return ads_info
 
 # Streamlit app layout
 st.title("Meta Ads Data Fetcher")
@@ -47,43 +77,24 @@ if st.button("Fetch Data"):
     if start_date > end_date:
         st.error("Start date cannot be later than end date.")
     else:
-        data = fetch_data(query, start_date.isoformat(), end_date.isoformat())
-        
-        if data:
-            # Extract and process the data
-            ads_info = []
-            for ad_set in data.get("results", []):
-                for ad in ad_set:
-                    ad_info = {
-                        "Title": ad["snapshot"].get("title"),
-                        "Link URL": ad["snapshot"].get("link_url"),
-                        "Page Name": ad.get("pageName"),
-                        "Image URL": ad["snapshot"]["images"][0].get("original_image_url") if ad["snapshot"].get("images") else None,
-                        "Body": ad["snapshot"]["body"]["markup"].get("__html") if ad["snapshot"].get("body", {}).get("markup") else None,
-                        "Creation Time": decode_timestamp(ad["snapshot"].get("creation_time")),
-                        "End Date": decode_timestamp(ad.get("endDate")) if ad.get("endDate") else None,
-                        "Page URL": ad["snapshot"].get("page_profile_uri"),
-                        "Page Like Count": ad["snapshot"].get("page_like_count"),
-                        "Publisher Platforms": ad.get("publisherPlatform")
-                    }
-                    ads_info.append(ad_info)
-            
-            if ads_info:
-                df = pd.DataFrame(ads_info)
+        ads_info = fetch_data(query, start_date.isoformat(), end_date.isoformat())
 
-                # Generate Excel file in memory
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False, sheet_name="Meta Ads")
-                output.seek(0)
+        if ads_info:
+            df = pd.DataFrame(ads_info)
 
-                # Download button for the Excel file
-                st.success("Data fetched successfully!")
-                st.download_button(
-                    label="Download Excel File",
-                    data=output,
-                    file_name="meta_ads_data.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.warning("No data found for the given query and date range.")
+            # Generate Excel file in memory
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name="Meta Ads")
+            output.seek(0)
+
+            # Download button for the Excel file
+            st.success("Data fetched successfully!")
+            st.download_button(
+                label="Download Excel File",
+                data=output,
+                file_name="meta_ads_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.warning("No data found for the given query and date range.")
