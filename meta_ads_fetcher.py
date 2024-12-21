@@ -38,7 +38,7 @@ def fetch_data(query, start_date, end_date):
 st.title("Meta Ads Data Fetcher")
 
 # User inputs
-query = st.text_input("Enter query (e.g., Cosmetics):", "Cosmetics")
+query = st.text_input("Enter query (e.g., Cosmetics):", "")
 start_date = st.date_input("Start date:")
 end_date = st.date_input("End date:")
 
