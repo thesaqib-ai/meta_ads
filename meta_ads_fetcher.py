@@ -9,7 +9,7 @@ def decode_timestamp(timestamp):
     return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
 # Function to fetch data from the API
-def fetch_data(query, start_date, end_date):
+def fetch_data(query, start_date, end_date, max_pages):
     url = "https://meta-ad-library.p.rapidapi.com/search/ads"
     querystring = {
         "query": query,
@@ -29,6 +29,7 @@ def fetch_data(query, start_date, end_date):
 
     ads_info = []
     continuation_token = None
+    page_count = 0
 
     while True:
         if continuation_token:
@@ -56,7 +57,9 @@ def fetch_data(query, start_date, end_date):
                     ads_info.append(ad_info)
 
             continuation_token = data.get("continuation_token")
-            if not continuation_token:
+            page_count += 1
+
+            if not continuation_token or page_count >= max_pages:
                 break
         else:
             st.error(f"Error fetching data: {response.status_code}")
@@ -71,13 +74,14 @@ st.title("Meta Ads Data Fetcher")
 query = st.text_input("Enter query (e.g., Cosmetics):", "")
 start_date = st.date_input("Start date:")
 end_date = st.date_input("End date:")
+max_pages = st.number_input("Enter the number of pages to fetch:", min_value=1, step=1)
 
 # Fetch and process data
 if st.button("Fetch Data"):
     if start_date > end_date:
         st.error("Start date cannot be later than end date.")
     else:
-        ads_info = fetch_data(query, start_date.isoformat(), end_date.isoformat())
+        ads_info = fetch_data(query, start_date.isoformat(), end_date.isoformat(), max_pages)
 
         if ads_info:
             df = pd.DataFrame(ads_info)
